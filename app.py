@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import numpy as np
 from scipy import stats
 import pandas as pd
@@ -10,6 +11,28 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
+
+pwa_html = """
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#FF4B4B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="AB Calculator">
+<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/static/sw.js')
+            .then(function(registration) {
+                console.log('ServiceWorker registered');
+            })
+            .catch(function(err) {
+                console.log('ServiceWorker registration failed: ', err);
+            });
+    });
+}
+</script>
+"""
+components.html(pwa_html, height=0)
 
 st.title("A/B Test Sample Size Calculator")
 st.markdown("Calculate the required sample size for your upcoming A/B test to ensure statistically valid results.")

@@ -1,11 +1,11 @@
 {
-  "name": "A/B Test Sample Size Calculator",
-  "short_name": "AB Calculator",
-  "description": "Calculate required sample sizes for statistically valid A/B tests",
+  "name": "A/B Test Calculator Pro",
+  "short_name": "AB Pro",
+  "description": "Professional A/B testing calculator with AI insights and test history",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#FF4B4B",
+  "theme_color": "#0066CC",
   "orientation": "portrait-primary",
   "icons": [
     {

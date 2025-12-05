@@ -7,11 +7,66 @@ import json
 from datetime import datetime
 import os
 from openai import OpenAI
+import bcrypt
+from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
 # do not change this unless explicitly requested by the user
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+engine = create_engine(DATABASE_URL) if DATABASE_URL else None
+SessionLocal = sessionmaker(bind=engine) if engine else None
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+if engine:
+    Base.metadata.create_all(bind=engine)
+
+def hash_password(password):
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(password, password_hash):
+    return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+
+def create_user(username, password):
+    if not SessionLocal:
+        return False, "Database not configured"
+    session = SessionLocal()
+    try:
+        existing = session.query(User).filter(User.username == username).first()
+        if existing:
+            return False, "Username already exists"
+        user = User(username=username, password_hash=hash_password(password))
+        session.add(user)
+        session.commit()
+        return True, "Account created successfully"
+    except Exception as e:
+        session.rollback()
+        return False, str(e)
+    finally:
+        session.close()
+
+def authenticate_user(username, password):
+    if not SessionLocal:
+        return False, "Database not configured"
+    session = SessionLocal()
+    try:
+        user = session.query(User).filter(User.username == username).first()
+        if user and verify_password(password, user.password_hash):
+            return True, "Login successful"
+        return False, "Invalid username or password"
+    finally:
+        session.close()
 
 st.set_page_config(
     page_title="A/B Test Sample Size Calculator",
@@ -41,8 +96,67 @@ if ('serviceWorker' in navigator) {
 """
 components.html(pwa_html, height=0)
 
-st.title("A/B Test Sample Size Calculator")
-st.markdown("Calculate the required sample size for your upcoming A/B test to ensure statistically valid results.")
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+if 'username' not in st.session_state:
+    st.session_state.username = None
+
+def show_auth_page():
+    st.title("A/B Test Sample Size Calculator")
+    st.markdown("Sign in or create an account to use the calculator.")
+    
+    auth_tab1, auth_tab2 = st.tabs(["Sign In", "Sign Up"])
+    
+    with auth_tab1:
+        st.subheader("Sign In")
+        login_username = st.text_input("Username", key="login_username")
+        login_password = st.text_input("Password", type="password", key="login_password")
+        
+        if st.button("Sign In", type="primary", use_container_width=True):
+            if login_username and login_password:
+                success, message = authenticate_user(login_username, login_password)
+                if success:
+                    st.session_state.authenticated = True
+                    st.session_state.username = login_username
+                    st.rerun()
+                else:
+                    st.error(message)
+            else:
+                st.warning("Please enter both username and password")
+    
+    with auth_tab2:
+        st.subheader("Create Account")
+        signup_username = st.text_input("Choose a username", key="signup_username")
+        signup_password = st.text_input("Choose a password", type="password", key="signup_password")
+        signup_confirm = st.text_input("Confirm password", type="password", key="signup_confirm")
+        
+        if st.button("Create Account", type="primary", use_container_width=True):
+            if not signup_username or not signup_password:
+                st.warning("Please fill in all fields")
+            elif len(signup_password) < 6:
+                st.warning("Password must be at least 6 characters")
+            elif signup_password != signup_confirm:
+                st.error("Passwords do not match")
+            else:
+                success, message = create_user(signup_username, signup_password)
+                if success:
+                    st.success(message + " You can now sign in.")
+                else:
+                    st.error(message)
+
+def show_main_app():
+    col_header, col_logout = st.columns([4, 1])
+    with col_header:
+        st.title("A/B Test Sample Size Calculator")
+    with col_logout:
+        st.write("")
+        st.write(f"Welcome, **{st.session_state.username}**")
+        if st.button("Sign Out"):
+            st.session_state.authenticated = False
+            st.session_state.username = None
+            st.rerun()
+    
+    st.markdown("Calculate the required sample size for your upcoming A/B test to ensure statistically valid results.")
 
 def calculate_sample_size(baseline_rate, mde, power, significance, two_tailed=True):
     """

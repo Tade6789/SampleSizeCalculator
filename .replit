@@ -2,7 +2,7 @@ modules = ["python-3.11"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["libxcrypt", "pkg-config", "xsimd"]
+packages = ["cargo", "glibcLocales", "libiconv", "libxcrypt", "pkg-config", "rustc", "xsimd"]
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -40,5 +40,9 @@ externalPort = 80
 localPort = 33621
 externalPort = 3001
 
+[[ports]]
+localPort = 42575
+externalPort = 3000
+
 [agent]
-integrations = ["python_openai:1.0.0"]
+integrations = ["python_openai:1.0.0", "streamlit_database:1.0.0"]

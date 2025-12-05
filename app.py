@@ -5,6 +5,13 @@ from scipy import stats
 import pandas as pd
 import json
 from datetime import datetime
+import os
+from openai import OpenAI
+
+# the newest OpenAI model is "gpt-5" which was released August 7, 2025.
+# do not change this unless explicitly requested by the user
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
 st.set_page_config(
     page_title="A/B Test Sample Size Calculator",
@@ -108,7 +115,40 @@ def calculate_power_for_sample_size(baseline_rate, mde, n, significance, two_tai
 if 'scenarios' not in st.session_state:
     st.session_state.scenarios = []
 
-tab1, tab2 = st.tabs(["Calculator", "Comparison Mode"])
+if 'chat_messages' not in st.session_state:
+    st.session_state.chat_messages = []
+
+def get_ai_advice(question, context):
+    """Get AI advice about A/B testing using OpenAI."""
+    if not openai_client:
+        return "AI assistant is not available. Please add your OpenAI API key."
+    
+    system_prompt = """You are an expert A/B testing consultant and statistician. 
+You help users understand:
+- How to design effective A/B tests
+- Sample size requirements and statistical concepts
+- Best practices for running experiments
+- How to interpret results and avoid common pitfalls
+- Statistical power, significance levels, and effect sizes
+
+Keep responses concise but informative. Use the context provided about the user's current test parameters when relevant."""
+    
+    try:
+        # the newest OpenAI model is "gpt-5" which was released August 7, 2025.
+        # do not change this unless explicitly requested by the user
+        response = openai_client.chat.completions.create(
+            model="gpt-5",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Context about my current A/B test:\n{context}\n\nMy question: {question}"}
+            ],
+            max_completion_tokens=1024
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Sorry, I encountered an error: {str(e)}"
+
+tab1, tab2, tab3 = st.tabs(["Calculator", "Comparison Mode", "AI Assistant"])
 
 with tab1:
     st.divider()
@@ -519,3 +559,62 @@ with tab2:
                 st.rerun()
     else:
         st.info("Add scenarios using the form above to compare different test configurations.")
+
+with tab3:
+    st.subheader("AI A/B Testing Assistant")
+    st.markdown("Ask questions about A/B testing, experiment design, or get advice on your current test setup.")
+    
+    if not openai_client:
+        st.warning("AI assistant requires an OpenAI API key. Please add your OPENAI_API_KEY in the Secrets tab.")
+    else:
+        current_context = f"""
+- Baseline conversion rate: {st.session_state.get('main_baseline', 5.0)}%
+- Minimum detectable effect: {st.session_state.get('main_mde', 10.0)}%
+- Statistical power: {st.session_state.get('main_power', 80.0)}%
+- Significance level: {st.session_state.get('main_significance', 5.0)}%
+- Test type: {st.session_state.get('main_test_type', 'Two-tailed')}
+- Daily traffic: {st.session_state.get('main_traffic', 0)}
+"""
+        
+        for message in st.session_state.chat_messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+        
+        example_questions = [
+            "What sample size do I need for my test?",
+            "How long should I run my A/B test?",
+            "What is statistical power and why does it matter?",
+            "How do I choose the right MDE for my test?",
+            "When should I use a one-tailed vs two-tailed test?",
+            "What are common mistakes in A/B testing?"
+        ]
+        
+        if not st.session_state.chat_messages:
+            st.markdown("**Example questions you can ask:**")
+            cols = st.columns(2)
+            for i, q in enumerate(example_questions):
+                with cols[i % 2]:
+                    if st.button(q, key=f"example_{i}", use_container_width=True):
+                        st.session_state.chat_messages.append({"role": "user", "content": q})
+                        with st.spinner("Thinking..."):
+                            response = get_ai_advice(q, current_context)
+                        st.session_state.chat_messages.append({"role": "assistant", "content": response})
+                        st.rerun()
+        
+        if prompt := st.chat_input("Ask about A/B testing..."):
+            st.session_state.chat_messages.append({"role": "user", "content": prompt})
+            
+            with st.chat_message("user"):
+                st.markdown(prompt)
+            
+            with st.chat_message("assistant"):
+                with st.spinner("Thinking..."):
+                    response = get_ai_advice(prompt, current_context)
+                st.markdown(response)
+            
+            st.session_state.chat_messages.append({"role": "assistant", "content": response})
+        
+        if st.session_state.chat_messages:
+            if st.button("Clear Chat History", type="secondary"):
+                st.session_state.chat_messages = []
+                st.rerun()
